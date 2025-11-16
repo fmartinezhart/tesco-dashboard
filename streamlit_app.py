@@ -1,19 +1,27 @@
 import streamlit as st
+import json
 import pandas as pd
 import math
 from pathlib import Path
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import re
+
 
 # Set the title and favicon that appear in the Browser's tab bar.
 st.set_page_config(
-    page_title='GDP dashboard',
-    page_icon=':earth_americas:', # This is an emoji shortcode. Could be a URL too.
+    page_title='Tesco data dashboard',
+    page_icon='🛒', # This is an emoji shortcode. Could be a URL too.
 )
+
+
 
 # -----------------------------------------------------------------------------
 # Declare some useful functions.
 
 @st.cache_data
-def get_gdp_data():
+def get_tesco_data(file):
     """Grab GDP data from a CSV file.
 
     This uses caching to avoid having to read the file every time. If we were
@@ -22,130 +30,224 @@ def get_gdp_data():
     """
 
     # Instead of a CSV on disk, you could read from an HTTP endpoint here too.
-    DATA_FILENAME = Path(__file__).parent/'data/gdp_data.csv'
-    raw_gdp_df = pd.read_csv(DATA_FILENAME)
+    #DATA_FILENAME = Path(__file__).parent/'data/tesco.json'
+    
+    data = json.load(file) 
+   
 
-    MIN_YEAR = 1960
-    MAX_YEAR = 2022
+    purchases = data["purchases"]
+    orderedItems = []
+    
+    for visit in purchases:
+        for item in visit["items"]:
+            orderedItem = item
+            orderedItem["timeStamp"] = visit["timestamp"]
+            orderedItems.append(orderedItem)
 
-    # The data above has columns like:
-    # - Country Name
-    # - Country Code
-    # - [Stuff I don't care about]
-    # - GDP for 1960
-    # - GDP for 1961
-    # - GDP for 1962
-    # - ...
-    # - GDP for 2022
-    #
-    # ...but I want this instead:
-    # - Country Name
-    # - Country Code
-    # - Year
-    # - GDP
-    #
-    # So let's pivot all those year-columns into two: Year and GDP
-    gdp_df = raw_gdp_df.melt(
-        ['Country Code'],
-        [str(x) for x in range(MIN_YEAR, MAX_YEAR + 1)],
-        'Year',
-        'GDP',
-    )
+    
+    df = pd.DataFrame(orderedItems)
+    df = df.query("name != 'Delivery Service Charge'")
+    df = df.query("name != '4.00 Minimum Basket Charge Tesco.Com Groceries'")
+    df = df.query("name != '2.50 SERVICE     CHARGE '")
+    df = df.query("name != 'HOME DELIVERY    SUBSTITUTION     REFUND          '")
+    df = df.query("name != '3.00 SERVICE     CHARGE '")
+    df['timeStamp'] = pd.to_datetime(df['timeStamp'])
+    df['Year'] = df['timeStamp'].dt.year
+    df['year_month'] = df['timeStamp'].dt.to_period('M')
+    
+    
+    
+    full_df = pd.DataFrame(purchases)
+    full_df['timestamp'] = pd.to_datetime(full_df['timestamp'])
+    full_df['Year'] = full_df['timestamp'].dt.year
+    full_df['year_month'] = full_df['timestamp'].dt.to_period('M')
+    
+    return df, full_df
 
-    # Convert years from string to integers
-    gdp_df['Year'] = pd.to_numeric(gdp_df['Year'])
-
-    return gdp_df
-
-gdp_df = get_gdp_data()
+#tesco_df, full_df = get_tesco_data()
 
 # -----------------------------------------------------------------------------
 # Draw the actual page
 
 # Set the title that appears at the top of the page.
 '''
-# :earth_americas: GDP dashboard
+# 🛒 Tesco data dashboard
+See insights into your purchasing trends extracted from your tesco clubcard data
 
-Browse GDP data from the [World Bank Open Data](https://data.worldbank.org/) website. As you'll
-notice, the data only goes to 2022 right now, and datapoints for certain years are often missing.
-But it's otherwise a great (and did I mention _free_?) source of data.
+Visit this link [Tesco Data Website
+](https://www.tesco.com/account/data-portability/en-GB/?srsltid=AfmBOorO2jQshWwglKpj2a1HoQyl3GMKA0MC5W1Zaa9IZ-TGE4IE42M8) to download your data, this process can take 24 hours
+
+Once complete extract the Json file from inside the zip they provide you. Or you can use this example data
 '''
-
+with open("data/tesco.json", "rb") as file:
+        st.download_button(
+            label="Download example file",
+            data=file,
+            file_name="data/tesco.json"
+        )
 # Add some spacing
 ''
 ''
 
-min_value = gdp_df['Year'].min()
-max_value = gdp_df['Year'].max()
 
-from_year, to_year = st.slider(
-    'Which years are you interested in?',
-    min_value=min_value,
-    max_value=max_value,
-    value=[min_value, max_value])
-
-countries = gdp_df['Country Code'].unique()
-
-if not len(countries):
-    st.warning("Select at least one country")
-
-selected_countries = st.multiselect(
-    'Which countries would you like to view?',
-    countries,
-    ['DEU', 'FRA', 'GBR', 'BRA', 'MEX', 'JPN'])
-
-''
-''
-''
-
-# Filter the data
-filtered_gdp_df = gdp_df[
-    (gdp_df['Country Code'].isin(selected_countries))
-    & (gdp_df['Year'] <= to_year)
-    & (from_year <= gdp_df['Year'])
-]
-
-st.header('GDP over time', divider='gray')
-
-''
-
-st.line_chart(
-    filtered_gdp_df,
-    x='Year',
-    y='GDP',
-    color='Country Code',
-)
-
-''
-''
+file = st.file_uploader("Choose a file", type="json")
 
 
-first_year = gdp_df[gdp_df['Year'] == from_year]
-last_year = gdp_df[gdp_df['Year'] == to_year]
 
-st.header(f'GDP in {to_year}', divider='gray')
+if file is not None:
+    tesco_df, full_df = get_tesco_data(file)    
 
-''
+    min_value = full_df['Year'].min()
+    max_value = full_df['Year'].max()
 
-cols = st.columns(4)
+    from_year, to_year = st.slider(
+        'Which years are you interested in?',
+        min_value=min_value,
+        max_value=max_value,
+        value=[min_value, max_value])
 
-for i, country in enumerate(selected_countries):
-    col = cols[i % len(cols)]
 
-    with col:
-        first_gdp = first_year[first_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-        last_gdp = last_year[last_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
+    ''
+    ''
+    ''
 
-        if math.isnan(first_gdp):
-            growth = 'n/a'
-            delta_color = 'off'
-        else:
-            growth = f'{last_gdp / first_gdp:,.2f}x'
-            delta_color = 'normal'
+    # Filter the data
+    filtered_tesco_df = full_df[
+        (full_df['Year'] <= to_year)
+        & (from_year <= full_df['Year'])
+    ]
 
-        st.metric(
-            label=f'{country} GDP',
-            value=f'{last_gdp:,.0f}B',
-            delta=growth,
-            delta_color=delta_color
+    yearly_metrics = (
+        full_df.groupby('Year')
+            .agg(
+                # Metric 1: Average Order Value (Mean Basket Value)
+                aov=('basketValueGross', 'mean'),
+                
+                # Metric 2: Average Items Per Order (Mean Number of Items)
+                aipo=('numberOfItems', 'mean'),
+                
+                # Helper for Metric 3: Total Gross Value
+                total_gross_value=('basketValueGross', 'sum'),
+                
+                # Helper for Metric 3: Total Number of Items
+                total_items=('numberOfItems', 'sum'),
+                
+                # Optional: Count of visits
+                total_visits=('timestamp', 'count')
+
+            )
+            .reset_index()
         )
+
+    yearly_metrics['AIP'] = yearly_metrics['total_gross_value'] / yearly_metrics['total_items']
+
+    yearly_metrics = yearly_metrics.rename(columns={
+            'aov': 'Average Order Value (AOV)',
+            'aipo': 'Average Items per Order (AIPO)',
+            'AIP': 'Average Item Price (AIP)',
+            'total_visits': 'Total Visits'
+        })
+
+
+    metric_options = [
+            'Average Order Value (AOV)',
+            'Average Items per Order (AIPO)',
+            'Average Item Price (AIP)',
+            'Total Visits'
+        ]
+        
+    selected_metric = st.selectbox(
+            "Select a Metric to Visualize:",
+            options=metric_options
+        )
+
+        # Line Chart Visualization
+    st.line_chart(
+            yearly_metrics,
+            x='Year',
+            y=selected_metric,
+            color="#0066FF", # Tesco-inspired blue
+        )
+
+    ''
+    ''
+
+
+
+
+    st.header(f'Most purchased item per year', divider='gray')
+
+    ''
+    options = sorted(full_df['Year'].unique())
+    options.append("All Years")
+
+    selection = st.segmented_control(
+        "Directions", options, selection_mode="single"
+    )
+
+
+    if selection == 'All Years':
+        # --- Logic for All Years ---
+        
+        # 1. Calculate Top 10 names across all years
+        filtered_by_year_df = tesco_df
+
+    else:
+        # --- Logic for a Single Selected Year ---
+        
+        # 1. First, filter the main DataFrame by the selected year
+        filtered_by_year_df = tesco_df[tesco_df['Year'] == selection]
+        
+
+    top_item_stats_df = (
+            filtered_by_year_df.groupby('name')
+            .agg(
+                # Metric 1: Number of Times Bought (Frequency)
+                times_bought=('name', 'count'),
+                
+                # Metric 2: Total Quantity of Items Bought
+                total_quantity=('quantity', 'sum'),
+                
+                # Metric 3: Average Price of the Item
+                average_price=('price', 'mean'),
+                
+                # Metric 4: Total Revenue from the Item
+                total_spend=('price', 'sum')
+            )
+            .reset_index()
+        )
+        
+        # 5. Clean up and rename the size column, and format data
+    top_item_stats_df = top_item_stats_df.rename(columns={'times_bought': 'Times Bought (Orders)'})
+
+        # 6. Sort by Times Bought (Frequency) descending
+    top_item_stats_df = top_item_stats_df.sort_values(by='Times Bought (Orders)', ascending=False)
+        
+        # 7. Format the currency columns for display
+    top_item_stats_df['Average Price'] = top_item_stats_df['average_price']
+    top_item_stats_df['Total Spend'] = top_item_stats_df['total_spend']
+    top_item_stats_df['Total Quantity'] = top_item_stats_df['total_quantity'].astype(int)
+        
+        # 8. Select and reorder final columns for display
+    top_item_stats_df = top_item_stats_df[['name', 'Times Bought (Orders)', 'Total Quantity', 'Average Price', 'Total Spend']]
+
+
+    st.dataframe(
+        top_item_stats_df, 
+        hide_index=True, 
+        column_config={
+            "name": st.column_config.TextColumn("Item Name"),
+            "Average Price": st.column_config.NumberColumn(
+                "Average Price",
+                # This format string applies currency formatting, but the underlying data remains numeric for sorting
+                format="£ %.2f" 
+            ),
+            "Total Spend": st.column_config.NumberColumn(
+                "Total Spend",
+                # This format string applies currency formatting, but the underlying data remains numeric for sorting
+                format="£ %.2f",
+            )
+    }
+)
+else:
+    print("none")
