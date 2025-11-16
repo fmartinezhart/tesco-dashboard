@@ -1,6 +1,9 @@
-# :earth_americas: GDP dashboard template
+# 🛒 Tesco data dashboard
+See insights into your purchasing trends extracted from your tesco clubcard data
 
-A simple Streamlit app showing the GDP of different countries in the world.
+Visit this link [Tesco Data Website
+](https://www.tesco.com/account/data-portability/en-GB/?srsltid=AfmBOorO2jQshWwglKpj2a1HoQyl3GMKA0MC5W1Zaa9IZ-TGE4IE42M8) to download your data, this process can take 24 hours
+
 
 [![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://gdp-dashboard-template.streamlit.app/)
 
